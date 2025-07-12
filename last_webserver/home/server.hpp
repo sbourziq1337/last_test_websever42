@@ -71,8 +71,10 @@ public:
     std::string post_path;
     std::string response_red;
     ServerConfig server;
+    ServerConfig *server_config;
     ssize_t content_ch;
     bool found_redirection;
+    std::string cgj_path;
     std::vector<ServerConfig> server_configs;
     int fd_client; // File descriptor for client connection
     Request() : fd_client(-1) {}
@@ -286,3 +288,5 @@ bool read_headers_chunked(int fd,
                           std::vector<Request> &global_obj,
                           const std::map<std::string, std::vector<size_t> > &hostport_to_indexes, size_t client_server_idx);
 void sendErrorResponse(int fd, int error_code, const std::string &error_message, std::string path_file);
+void handle_cgi_request(ChunkedClientInfo &client, int new_socket, std::map<std::string, std::string> &headers);
+bool is_cgi_request(const std::string &path);

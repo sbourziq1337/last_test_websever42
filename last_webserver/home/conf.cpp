@@ -119,7 +119,7 @@ std::vector<ServerConfig> check_configfile()
                         if (inServerBlock)
                         {
                             std::cerr << "Error: Line " << lineNumber << ": Nested server blocks are not allowed" << std::endl;
-                            exit(1);
+                            return std::vector<ServerConfig>();
                         }
                         inServerBlock = true;
                         braceCount++;
@@ -129,7 +129,7 @@ std::vector<ServerConfig> check_configfile()
                     {
                         std::cerr << "Error: Line " << lineNumber << ": Expected '{' after server, got: '"
                                   << nextLine << "'" << std::endl;
-                        exit(1);
+                        return std::vector<ServerConfig>();
                     }
                 }
             }
@@ -177,7 +177,6 @@ std::vector<ServerConfig> check_configfile()
                         // }
 
                         // Check for missing index directive in specific cases
-            
                     }
 
                     inLocationBlock = false;
@@ -189,6 +188,20 @@ std::vector<ServerConfig> check_configfile()
                 braceCount--;
                 if (braceCount == 0)
                 {
+                    // Check for duplicate server (same port and server_name)
+                    for (size_t i = 0; i < servers.size(); i++)
+                    {
+                        if (servers[i].port == currentServer.port &&
+                            servers[i].server_name == currentServer.server_name)
+                        {
+                            std::cerr << "Error: Line " << lineNumber << ": Duplicate server configuration found. "
+                                      << "Server with port " << currentServer.port
+                                      << " and server_name '" << currentServer.server_name
+                                      << "' already exists" << std::endl;
+                            return std::vector<ServerConfig>();
+                        }
+                    }
+
                     servers.push_back(currentServer);
                     inServerBlock = false;
                 }
@@ -196,7 +209,7 @@ std::vector<ServerConfig> check_configfile()
             else
             {
                 std::cerr << "Error: Line " << lineNumber << ": Unexpected closing brace outside of any block" << std::endl;
-                exit(1);
+                return std::vector<ServerConfig>();
             }
         }
         else if (inServerBlock)
@@ -215,7 +228,7 @@ std::vector<ServerConfig> check_configfile()
                 {
                     std::cerr << "Error: Line " << lineNumber << ": Unknown directive '"
                               << directive << "' in location block" << std::endl;
-                    exit(1);
+                    return std::vector<ServerConfig>();
                 }
 
                 // For location block directives, ensure they end with semicolon (unless special)
@@ -223,7 +236,7 @@ std::vector<ServerConfig> check_configfile()
                 {
                     std::cerr << "Error: Line " << lineNumber << ": Missing semicolon at the end of directive: '"
                               << originalLine << "'" << std::endl;
-                    exit(1);
+                    return std::vector<ServerConfig>();
                 }
 
                 // Remove trailing semicolon now that we've checked it
@@ -267,7 +280,7 @@ std::vector<ServerConfig> check_configfile()
                     {
                         std::cerr << "Error: Line " << lineNumber << ": Invalid autoindex value '"
                                   << value << "'. Must be 'on' or 'off'" << std::endl;
-                        exit(1);
+                        return std::vector<ServerConfig>();
                     }
                     currentLocation->autoindex = (value == "on");
                 }
@@ -299,26 +312,26 @@ std::vector<ServerConfig> check_configfile()
                     iss >> cgi_path;
                     currentLocation->cgi_path = removeSemicolon(cgi_path);
                 }
- else if (directive == "redirection") 
-{
-    std::string redirectionUrl;
-    iss >> redirectionUrl;
-    
-    if (redirectionUrl.empty())
-    {
-        std::cerr << "Error: Line " << lineNumber << ": Missing URL for redirection directive" << std::endl;
-        exit(1);
-    }
-    
-    currentLocation->redirection = removeSemicolon(redirectionUrl);
-    
-    // Optional: Add basic URL validation
-    if (currentLocation->redirection.empty())
-    {
-        std::cerr << "Error: Line " << lineNumber << ": Empty redirection URL" << std::endl;
-        exit(1);
-    }
-}
+                else if (directive == "redirection")
+                {
+                    std::string redirectionUrl;
+                    iss >> redirectionUrl;
+
+                    if (redirectionUrl.empty())
+                    {
+                        std::cerr << "Error: Line " << lineNumber << ": Missing URL for redirection directive" << std::endl;
+                        return std::vector<ServerConfig>();
+                    }
+
+                    currentLocation->redirection = removeSemicolon(redirectionUrl);
+
+                    // Optional: Add basic URL validation
+                    if (currentLocation->redirection.empty())
+                    {
+                        std::cerr << "Error: Line " << lineNumber << ": Empty redirection URL" << std::endl;
+                        return std::vector<ServerConfig>();
+                    }
+                }
             }
             else
             {
@@ -327,7 +340,7 @@ std::vector<ServerConfig> check_configfile()
                 {
                     std::cerr << "Error: Line " << lineNumber << ": Unknown directive '"
                               << directive << "' in server block" << std::endl;
-                    exit(1);
+                    return std::vector<ServerConfig>();
                 }
 
                 // For server block directives, ensure they end with semicolon (unless special)
@@ -335,7 +348,7 @@ std::vector<ServerConfig> check_configfile()
                 {
                     std::cerr << "Error: Line " << lineNumber << ": Missing semicolon at the end of directive: '"
                               << originalLine << "'" << std::endl;
-                    exit(1);
+                    return std::vector<ServerConfig>();
                 }
 
                 // Now that we've checked for semicolon, remove it for processing
@@ -344,29 +357,69 @@ std::vector<ServerConfig> check_configfile()
 
                 if (directive == "listen")
                 {
-                    std::string portStr;
-                    iss >> portStr;
+                    std::string listenValue;
+                    iss >> listenValue;
 
                     // Remove semicolon if present
-                    portStr = removeSemicolon(portStr);
-
-                    // Check if portStr is a valid number
-                    for (size_t i = 0; i < portStr.length(); i++)
+                    listenValue = removeSemicolon(listenValue);
+                    
+                    // Check if it contains host:port format
+                    size_t colonPos = listenValue.find(":");
+                    if (colonPos != std::string::npos)
                     {
-                        if (!isdigit(portStr[i]))
+                        // Split host and port
+                        std::string hostPart = listenValue.substr(0, colonPos);
+                        std::string portPart = listenValue.substr(colonPos + 1);
+                        
+                        // Set host
+                        if (!hostPart.empty())
                         {
-                            std::cerr << "Error: Line " << lineNumber << ": Invalid port number: "
-                                      << portStr << std::endl;
-                            exit(1);
+                            currentServer.host = hostPart;
                         }
+                        
+                        // Validate and set port
+                        if (portPart.empty())
+                        {
+                            std::cerr << "Error: Line " << lineNumber << ": Missing port number after ':'" << std::endl;
+                            return std::vector<ServerConfig>();
+                        }
+                        
+                        // Check if port is a valid number
+                        for (size_t i = 0; i < portPart.length(); i++)
+                        {
+                            if (!isdigit(portPart[i]))
+                            {
+                                std::cerr << "Error: Line " << lineNumber << ": Invalid port number: "
+                                          << portPart << std::endl;
+                                return std::vector<ServerConfig>();
+                            }
+                        }
+                        
+                        currentServer.port = atoi(portPart.c_str());
                     }
-
-                    currentServer.port = atoi(portStr.c_str());
+                    else
+                    {
+                        // Only port specified
+                        // Check if it's a valid number
+                        for (size_t i = 0; i < listenValue.length(); i++)
+                        {
+                            if (!isdigit(listenValue[i]))
+                            {
+                                std::cerr << "Error: Line " << lineNumber << ": Invalid port number: "
+                                          << listenValue << std::endl;
+                                return std::vector<ServerConfig>();
+                            }
+                        }
+                        
+                        currentServer.port = atoi(listenValue.c_str());
+                    }
+                    
+                    // Validate port range
                     if (currentServer.port <= 0 || currentServer.port > 65535)
                     {
-                        std::cerr << "Error: Line " << lineNumber << ": Invalid port number: "
+                        std::cerr << "Error: Line " << lineNumber << ": Port number out of range (1-65535): "
                                   << currentServer.port << std::endl;
-                        exit(1);
+                        return std::vector<ServerConfig>();
                     }
                 }
                 else if (directive == "host")
@@ -403,7 +456,7 @@ std::vector<ServerConfig> check_configfile()
                     if (inLocationBlock)
                     {
                         std::cerr << "Error: Line " << lineNumber << ": Found new location block before closing previous one" << std::endl;
-                        exit(1);
+                        return std::vector<ServerConfig>();
                     }
 
                     LocationConfig loc;
@@ -446,7 +499,7 @@ std::vector<ServerConfig> check_configfile()
                         {
                             std::cerr << "Error: Line " << lineNumber << ": Unexpected content after '{' in location block: "
                                       << afterBrace << std::endl;
-                            exit(1);
+                            return std::vector<ServerConfig>();
                         }
                         inLocationBlock = true;
                         locationBraceCount++;
@@ -487,7 +540,7 @@ std::vector<ServerConfig> check_configfile()
                             {
                                 std::cerr << "Error: Line " << lineNumber << ": Expected '{' after location path, got: '"
                                           << nextLine << "'" << std::endl;
-                                exit(1);
+                                return std::vector<ServerConfig>();
                             }
                         }
                     }
@@ -495,7 +548,7 @@ std::vector<ServerConfig> check_configfile()
                     if (!inLocationBlock)
                     {
                         std::cerr << "Error: Line " << lineNumber << ": Missing opening brace for location block" << std::endl;
-                        exit(1);
+                        return std::vector<ServerConfig>();
                     }
 
                     // Add the location to the current server's locations vector
@@ -563,7 +616,7 @@ std::vector<ServerConfig> check_configfile()
                     else
                     {
                         std::cerr << "Error: Line " << lineNumber << ": Invalid error_page directive format" << std::endl;
-                        exit(1);
+                        return std::vector<ServerConfig>();
                     }
                 }
                 else if (directive == "client_max_body_size")
@@ -583,7 +636,7 @@ std::vector<ServerConfig> check_configfile()
                             {
                                 std::cerr << "Error: Line " << lineNumber << ": Invalid client_max_body_size value: "
                                           << size << std::endl;
-                                exit(1);
+                                return std::vector<ServerConfig>();
                             }
                         }
                         currentServer.client_max_body_size = atoll(size.c_str());
@@ -591,7 +644,7 @@ std::vector<ServerConfig> check_configfile()
                     else
                     {
                         std::cerr << "Error: Line " << lineNumber << ": Missing value for client_max_body_size" << std::endl;
-                        exit(1);
+                        return std::vector<ServerConfig>();
                     }
                 }
             }
@@ -600,7 +653,7 @@ std::vector<ServerConfig> check_configfile()
         {
             std::cerr << "Error: Line " << lineNumber << ": Unexpected content outside of server block: '"
                       << cleanLine << "'" << std::endl;
-            exit(1);
+            return std::vector<ServerConfig>();
         }
     }
 
@@ -608,14 +661,14 @@ std::vector<ServerConfig> check_configfile()
     if (braceCount != 0)
     {
         std::cerr << "Error: Missing closing brace for server block" << std::endl;
-        exit(1);
+        return std::vector<ServerConfig>();
     }
 
     // Check for unclosed location blocks
     if (locationBraceCount != 0)
     {
         std::cerr << "Error: Missing closing brace for location block" << std::endl;
-        exit(1);
+        return std::vector<ServerConfig>();
     }
 
     return servers;

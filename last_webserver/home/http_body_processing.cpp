@@ -278,6 +278,44 @@ std::string getmine_type(std::string line_path, std::map<std::string, std::strin
 // Send HTTP response based on method
 void send_response(int fd, ChunkedClientInfo &client)
 {
+    if (is_cgi_request(client.request_obj.path))
+    {
+
+        std::string index_path = client.request_obj.uri;
+        bool found = false;
+        // For POST requests, make sure body data is available
+        while (true)
+        {
+            for (size_t i = 0; i < client.request_obj.local_data.size(); i++)
+            {
+                std::string location_path = normalize_path(client.request_obj.local_data[i].path);
+
+                if (index_path == location_path)
+                {
+                    found = true;
+                    std::cout << "==============> index_path :  " << index_path << "  location: " << location_path << std::endl;
+                    client.request_obj.cgj_path = client.request_obj.local_data[i].cgi_path;
+                    break;
+                }
+            }
+            index_path = remove_last_path_component(index_path);
+            if (found == true || index_path == "/")
+                break;
+        }
+
+        if (!client.request_obj.cgj_path.empty())
+        {
+            handle_cgi_request(client, fd, client.parsed_headers);
+            return;
+        }
+        // if (client.request_obj.mthod == "POST")
+        // {
+        //     // Combine any remaining partial data as the body BEFORE calling CGI handler
+        //    std::string file_tmp_name = client.filename;
+        //    std::cout << "=============>> filename: " << file_tmp_name << std::endl;
+        // //    std::remove(client.filename.c_str());
+        // }
+    }
     std::cout << "====> Sending response for method: " << client.request_obj.mthod << std::endl;
     if (client.request_obj.mthod == "content_length")
     {

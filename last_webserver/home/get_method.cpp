@@ -155,17 +155,16 @@ void handle_directory_request(const std::string &path, const std::string &uri, i
     }
     if (is_file(index_path))
     {
-        std::cout << "=============================== Found index file: " << index_path << std::endl;
         std::string header = "HTTP/1.1 200 OK\r\nContent-Type: " + getContentType(index_path) + "\r\n";
         response(index_path, fd, header);
         return;
     }
 
     bool autoindex_enabled = find_location_autoindex(uri, obj);
-    if (!autoindex_enabled) // More idiomatic than == false
+
+    if (autoindex_enabled == false) // More idiomatic than == false
     {
-        std::string header = "HTTP/1.1 403 Forbidden\r\nContent-Type: " + type + "\r\n";
-        response("forbiden403.html", fd, header); // Fixed typo: forbiden -> forbidden
+        sendErrorResponse(fd, 403, "Forbidden", "error_page/403.html");
         return;
     }
 

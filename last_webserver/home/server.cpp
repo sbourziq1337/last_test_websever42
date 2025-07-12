@@ -41,7 +41,6 @@ bool process_request_headers(ChunkedClientInfo &client)
         {
             std::string location_path = normalize_path(client.request_obj.local_data[i].path);
             index_path = normalize_path(index_path);
-            std::cout << "++------ >>> Checking location path: " << location_path << " against index path: " << index_path << std::endl;
             if (index_path == location_path)
             {
                 found_local = true;
@@ -65,7 +64,6 @@ bool process_request_headers(ChunkedClientInfo &client)
     }
     if (found_method == false)
     {
-        std::cout << "root : " << client.request_obj.root << std::endl;
         client.upload_state = 2;
         client.request_obj.mthod = "method not found";
         return true;

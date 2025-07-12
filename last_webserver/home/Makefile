@@ -1,5 +1,5 @@
 SRC = server.cpp Request.cpp get_method.cpp post_method.cpp conf.cpp chunck_request.cpp setup_server.cpp \
-	parse_headers.cpp epoll_manager_client.cpp http_chunked_handler.cpp http_body_processing.cpp
+	parse_headers.cpp epoll_manager_client.cpp http_chunked_handler.cpp http_body_processing.cpp cgi.cpp
 cpp= c++ -g3
 
 CFLAGS = -std=c++98 
