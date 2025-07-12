@@ -94,12 +94,12 @@ std::vector<ServerConfig> check_configfile()
             continue;
 
         // Check if line contains "server" and "{" in any format
-        if (cleanLine == "server" || cleanLine == "server{" || cleanLine == "server;" ||
-            cleanLine.find("server {") != std::string::npos)
+        if (cleanLine == "server" || cleanLine == "server{" || cleanLine == "server;" || cleanLine == "server {" )
         {
             // For server declarations, we don't require a semicolon
             if (cleanLine == "server")
             {
+                // std::cout << "2222222222222222222222222222\n";
                 std::string nextLine;
                 while (std::getline(inputFile, nextLine))
                 {
@@ -144,7 +144,6 @@ std::vector<ServerConfig> check_configfile()
                 currentServer = ServerConfig();
                 currentServer.port = 80;                          // Default port
                 currentServer.host = "localhost";                 // Default host
-                currentServer.client_max_body_size = 1024 * 1024; // Default 1MB
             }
         }
         else if (cleanLine == "}" || cleanLine == "};")
@@ -483,14 +482,35 @@ std::vector<ServerConfig> check_configfile()
                     if (bracePos != std::string::npos)
                     {
                         // Split into path and potential brace
-                        loc.path = restOfLine.substr(0, bracePos);
+                        std::string pathPart = restOfLine.substr(0, bracePos);
 
                         // Trim trailing whitespace from path
-                        size_t pathEnd = loc.path.find_last_not_of(" \t");
+                        size_t pathEnd = pathPart.find_last_not_of(" \t");
                         if (pathEnd != std::string::npos)
-                            loc.path = loc.path.substr(0, pathEnd + 1);
+                            pathPart = pathPart.substr(0, pathEnd + 1);
                         else
-                            loc.path.clear();
+                            pathPart.clear();
+
+                        // Validate that pathPart contains only one word (the location path)
+                        std::istringstream pathStream(pathPart);
+                        std::string firstToken, secondToken;
+                        pathStream >> firstToken;
+                        
+                        if (firstToken.empty())
+                        {
+                            std::cerr << "Error: Line " << lineNumber << ": Missing location path" << std::endl;
+                            return std::vector<ServerConfig>();
+                        }
+                        
+                        if (pathStream >> secondToken)
+                        {
+                            std::cerr << "Error: Line " << lineNumber << ": Invalid location directive syntax. "
+                                      << "Expected 'location <path> {', got extra tokens: '"
+                                      << secondToken << "'" << std::endl;
+                            return std::vector<ServerConfig>();
+                        }
+                        
+                        loc.path = firstToken;
 
                         // Check for content after brace
                         std::string afterBrace = restOfLine.substr(bracePos + 1);
@@ -506,8 +526,26 @@ std::vector<ServerConfig> check_configfile()
                     }
                     else
                     {
-                        // No brace found in this line, path is the whole line
-                        loc.path = restOfLine;
+                        // No brace found in this line, validate that we only have one path token
+                        std::istringstream pathStream(restOfLine);
+                        std::string firstToken, secondToken;
+                        pathStream >> firstToken;
+                        
+                        if (firstToken.empty())
+                        {
+                            std::cerr << "Error: Line " << lineNumber << ": Missing location path" << std::endl;
+                            return std::vector<ServerConfig>();
+                        }
+                        
+                        if (pathStream >> secondToken)
+                        {
+                            std::cerr << "Error: Line " << lineNumber << ": Invalid location directive syntax. "
+                                      << "Expected 'location <path>', got extra tokens: '"
+                                      << secondToken << "'" << std::endl;
+                            return std::vector<ServerConfig>();
+                        }
+                        
+                        loc.path = firstToken;
 
                         // Check next line for opening brace with proper trimming
                         std::string nextLine;
